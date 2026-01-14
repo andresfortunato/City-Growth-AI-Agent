@@ -1,0 +1,129 @@
+# Visualization Test Questions for SQL Agent
+# These questions test the agent's ability to generate various types of visualizations
+# and data tables from the MSA wages and employment dataset
+#
+# NOTE: The dataset uses full MSA names (e.g., "Austin-Round Rock, TX", "Seattle-Tacoma-Bellevue, WA")
+# The SQL agent handles partial matches using ILIKE, so questions can use city names like "Austin" or "Seattle"
+# Data spans years 2000-2024 with annual averages (qtr='A')
+# Available metrics: annual_avg_estabs_count, annual_avg_emplvl, total_annual_wages, 
+#                    avg_annual_pay, annual_avg_wkly_wage
+
+## TIME SERIES VISUALIZATIONS (Line Charts, Area Charts)
+
+1. Create a line chart showing the average annual pay trend for Austin from 2000 to 2024.
+
+2. Visualize the employment level changes over time for Seattle from 2010 to 2024 as a line graph.
+
+3. Show me an area chart of total annual wages for New York City from 2000 to 2024.
+
+4. Create a multi-line chart comparing average weekly wage trends for Austin, Seattle, and Denver from 2015 to 2024.
+
+5. Display a line graph showing the growth in number of establishments for Chicago from 2000 to 2024.
+
+6. Visualize the average annual pay trends for the top 5 MSAs by employment level from 2020 to 2024 as overlapping lines.
+
+7. Create a line chart showing year-over-year percentage change in average annual pay for Boston from 2001 to 2024.
+
+8. Show me an area chart of employment levels for Miami from 2000 to 2024, highlighting the 2008-2009 recession period.
+
+## COMPARISON VISUALIZATIONS (Bar Charts, Grouped Bar Charts)
+
+9. Create a bar chart comparing average annual pay in 2024 for the top 10 MSAs by employment level.
+
+10. Visualize a grouped bar chart showing average annual pay and average weekly wage for Austin, Seattle, Denver, and Boston in 2023.
+
+11. Show me a horizontal bar chart ranking the top 15 MSAs by total annual wages in 2024.
+
+12. Create a bar chart comparing employment levels in 2020 vs 2024 for the top 10 MSAs.
+
+13. Visualize a grouped bar chart showing establishments count, employment level, and total wages (normalized) for Chicago, Los Angeles, and New York in 2023.
+
+14. Create a bar chart showing the difference in average annual pay between 2019 and 2024 for the top 20 MSAs.
+
+15. Show me a stacked bar chart comparing total annual wages by state for the top 5 states in 2024.
+
+16. Visualize a bar chart showing the top 10 MSAs with the highest average weekly wage in 2024.
+
+## DISTRIBUTION & STATISTICAL VISUALIZATIONS (Histograms, Box Plots, Violin Plots)
+
+17. Create a histogram showing the distribution of average annual pay across all MSAs in 2024.
+
+18. Visualize a box plot showing the distribution of employment levels by state in 2024.
+
+19. Show me a histogram of total annual wages for all MSAs in 2023, with bins of $10 billion.
+
+20. Create a violin plot showing the distribution of average weekly wages across different states in 2024.
+
+21. Visualize a histogram of the number of establishments across all MSAs in 2024.
+
+22. Show me a box plot comparing average annual pay distributions for MSAs in California, Texas, and New York in 2024.
+
+## CORRELATION & SCATTER PLOTS
+
+23. Create a scatter plot showing the relationship between employment level and average annual pay for all MSAs in 2024.
+
+24. Visualize a scatter plot with employment level on x-axis and total annual wages on y-axis for 2024, colored by state.
+
+25. Show me a scatter plot comparing average annual pay vs average weekly wage for all MSAs in 2024.
+
+26. Create a scatter plot showing the relationship between number of establishments and employment level in 2024.
+
+27. Visualize a scatter plot of average annual pay in 2019 vs 2024 for all MSAs, with a diagonal reference line.
+
+## GEOGRAPHIC & MAP VISUALIZATIONS
+
+28. Create a choropleth map showing average annual pay by state in 2024.
+
+29. Visualize a map showing employment levels by MSA in 2024, with larger circles for higher employment.
+
+30. Show me a geographic heatmap of average weekly wages by state in 2024.
+
+31. Create a map visualization comparing average annual pay in 2020 vs 2024 by state, showing the change.
+
+## RANKING & TOP-N VISUALIZATIONS
+
+32. Create a horizontal bar chart showing the top 20 MSAs ranked by average annual pay in 2024.
+
+33. Visualize a bar chart showing the bottom 10 MSAs by average weekly wage in 2024.
+
+34. Show me a table and bar chart of the top 15 MSAs by total annual wages in 2023, sorted descending.
+
+35. Create a visualization ranking MSAs by employment level growth rate from 2020 to 2024 (top 10).
+
+## MULTI-DIMENSIONAL ANALYSIS
+
+36. Create a heatmap showing average annual pay by year (2015-2024) for the top 10 MSAs.
+
+37. Visualize a grouped bar chart showing average annual pay trends for Austin, Seattle, Denver, Boston, and Miami from 2010 to 2024, with one bar group per year.
+
+38. Show me a bubble chart where x-axis is employment level, y-axis is average annual pay, bubble size is total wages, and color represents state, for 2024 data.
+
+39. Create a faceted line chart showing employment trends from 2000 to 2024 for the top 5 states (one subplot per state).
+
+40. Visualize a radar/spider chart comparing Austin, Seattle, and Denver across metrics: employment level, average annual pay, total wages, and establishments count in 2024.
+
+## TREND ANALYSIS & GROWTH VISUALIZATIONS
+
+41. Create a line chart showing the compound annual growth rate (CAGR) of average annual pay for Austin from 2010 to 2024.
+
+42. Visualize a bar chart showing year-over-year percentage change in employment level for Seattle from 2001 to 2024.
+
+43. Show me a line chart comparing the growth trajectories of average annual pay for tech hubs (Austin, Seattle, San Francisco, Boston) from 2010 to 2024.
+
+44. Create a visualization showing the recovery in employment levels post-2020 for the top 10 MSAs.
+
+## AGGREGATION TABLES & SUMMARY STATISTICS
+
+45. Create a summary table showing count, mean, median, min, and max of average annual pay by state in 2024.
+
+46. Show me a pivot table with states as rows, years (2020-2024) as columns, and average annual pay as values.
+
+47. Create a table comparing key metrics (employment, wages, establishments) for Austin, Seattle, Denver, and Boston in 2024.
+
+48. Visualize a summary statistics table showing employment level statistics (mean, median, std dev, min, max) for all MSAs in 2024.
+
+## COMPLEX MULTI-METRIC VISUALIZATIONS
+
+49. Create a dashboard-style visualization with 4 panels: (1) line chart of employment trends 2000-2024 for top 5 MSAs, (2) bar chart of 2024 average annual pay top 10, (3) scatter plot of employment vs wages 2024, (4) table of summary statistics by state 2024.
+
+50. Visualize a comprehensive analysis showing: a line chart of average annual pay trends for Austin from 2000-2024, a bar chart comparing Austin to top 10 MSAs in 2024, and a table showing year-over-year changes.

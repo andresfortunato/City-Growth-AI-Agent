@@ -64,34 +64,9 @@ def build_agent(db, model):
     toolkit = SQLDatabaseToolkit(db=db, llm=model)
     tools = toolkit.get_tools()
 
-    # Get specific tools
-    get_schema_tool = next(tool for tool in tools if tool.name == "sql_db_schema")
-    get_schema_node = ToolNode([get_schema_tool], name="get_schema")
-
+    # Get query tool (schema is cached in system prompt - see docs/schema_caching.md)
     run_query_tool = next(tool for tool in tools if tool.name == "sql_db_query")
     run_query_node = ToolNode([run_query_tool], name="run_query")
-
-    # Node: List tables
-    def list_tables(state: MessagesState):
-        tool_call = {
-            "name": "sql_db_list_tables",
-            "args": {},
-            "id": "abc123",
-            "type": "tool_call",
-        }
-        tool_call_message = AIMessage(content="", tool_calls=[tool_call])
-
-        list_tables_tool = next(tool for tool in tools if tool.name == "sql_db_list_tables")
-        tool_message = list_tables_tool.invoke(tool_call)
-        response = AIMessage(f"Available tables: {tool_message.content}")
-
-        return {"messages": [tool_call_message, tool_message, response]}
-
-    # Node: Get schema
-    def call_get_schema(state: MessagesState):
-        llm_with_tools = model.bind_tools([get_schema_tool], tool_choice="any")
-        response = llm_with_tools.invoke(state["messages"])
-        return {"messages": [response]}
 
     # Node: Generate query
     generate_query_system_prompt = f"""
@@ -281,23 +256,16 @@ Analysis: "In 2023, the average annual pay in Austin-Round Rock, TX was $68,450.
             return "check_query"
 
     # Build the graph
-    # Flow: list_tables → get_schema → generate_query → check_query → run_query → analyze_results → END
-    # Note: This is a linear flow with no retry loop to prevent infinite loops
-    # If query execution fails, the error will be shown in the final analysis
-    # Future enhancement: Add conditional retry from run_query if needed
+    # Flow: generate_query → check_query → run_query → analyze_results → END
+    # Note: Schema is cached in system prompt (see docs/schema_caching.md)
+    # This skips dynamic schema discovery for faster execution
     builder = StateGraph(MessagesState)
-    builder.add_node(list_tables)
-    builder.add_node(call_get_schema)
-    builder.add_node(get_schema_node, "get_schema")
     builder.add_node(generate_query)
     builder.add_node(check_query)
     builder.add_node(run_query_node, "run_query")
     builder.add_node(analyze_results)
 
-    builder.add_edge(START, "list_tables")
-    builder.add_edge("list_tables", "call_get_schema")
-    builder.add_edge("call_get_schema", "get_schema")
-    builder.add_edge("get_schema", "generate_query")
+    builder.add_edge(START, "generate_query")
     builder.add_conditional_edges("generate_query", should_continue)
     builder.add_edge("check_query", "run_query")
     builder.add_edge("run_query", "analyze_results")
