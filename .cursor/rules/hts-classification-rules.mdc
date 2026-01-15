@@ -1,0 +1,80 @@
+---
+alwaysApply: true
+---
+
+# This is an AI agent for product classification in customs using HTS (US) and TIGIE (MX)
+
+# Rules
+- ALWAYS use source .venv/bin/activate && or uv run for running python scripts
+- NEVER USE GIT TO REVERT CHANGES, SO THAT WE DO NOT LOSE LOCAL UNCOMMITED EDITS.
+- Always come up with diagnostics, a plan, and ask for approval before executing
+- Avoid multiplication of files, whenever possible keep codebase minimal
+- Try to make scripts as short, minimalistic and straightforward as possible.
+- You can always use Supabase MCP to inspect the database, and you can edit Supabase database after asking for permission
+- Do not write summary files, ask user if he wants a summary file.
+
+## Repo Map
+api/                     FastAPI surface (SSE + WebSocket)
+  app.py                 App setup + CORS + health
+  endpoints/classify.py  /api/classify routes (HTS/TIGIE, stream + answer, WS)
+  models.py              Pydantic request/response + enums
+  auth/                  Supabase JWT validation + service client
+  services/              Session store + workflow adapters (HTS/TIGIE)
+backend/                 LangGraph workflows + CLI helpers
+  fast_workflow_cautious.py           HTS express (non-interactive)
+  interactive_workflow.py          HTS detailed (interrupt/Q&A)
+  fast_workflow_cautious_tigie.py     TIGIE express
+  interactive_workflow_tigie.py    TIGIE detailed
+  ligie_prompts_lean.py, tigie_db_helpers.py  TIGIE prompts/DB helpers
+frontend/                Vite + React + TS client (shadcn UI)
+  src/App.tsx            Routes (intro/auth/app/thank-you) + providers
+  src/pages/App.tsx      Main layout (chat, history, settings)
+  src/components/app/    Chat UI, history list, result card, settings
+  src/lib/api.ts         Supabase-backed API client (WS stream, SSE fallback)
+  supabase/              Migrations + edge functions (classify, upload-image)
+supabase/functions/      Edge function for uploads (anon key + auth header)
+Dockerfile               Backend image (uvicorn)
+run_api.py, run_api_dev.py  Local FastAPI entrypoints (dev disables reload for WS)
+vercel.json              Frontend deploy config
+railway.json             Backend deploy config
+query_traces_by_thread.py LangSmith trace inspection helper
+docs: TIGIE_IMPLEMENTATION.md, Master Plan Classification Agent.md, graph.png
+
+## Backend (FastAPI + LangGraph)
+- `api/app.py` wires CORS, health, and mounts the classification router. Auth is enforced via Supabase JWT (`SUPABASE_JWT_SECRET`).
+- `api/endpoints/classify.py` exposes:
+  - `POST /api/classify/stream` → SSE stream for express/detailed, system switch (`hts` or `tigie`), returns NDJSON `StreamMessage`.
+  - `POST /api/classify/answer` → resume detailed sessions with answers.
+  - `GET /api/classify/session/{id}/status|messages` → reconnection helpers.
+  - `WS /api/classify/ws` → primary path for the frontend; supports new runs and reconnections with buffered messages.
+- Session state is kept in-memory via `api/services/session_manager.py` (status, timers for cumulative execution time, buffered messages, background tasks).
+- `api/services/workflow_adapter.py` bridges HTTP/WS to LangGraph workflows, normalizes warnings, and fans out to HTS/TIGIE express & detailed variants. Detailed flows honor interrupts for Q&A, keep timing excluding user wait, and yield normalized results.
+- Workflows live in `backend/` and rely on OpenAI `gpt-5-mini` plus Postgres access to HTS/TIGIE reference tables. Both express and interactive flows include bilingual prompts and optional image URLs.
+- CLI runners in `backend/main.py` and `backend/main_tigie.py` provide terminal UX for express/detailed runs.
+
+### Backend Environment
+- Core: `OPENAI_API_KEY`, `DB_HOST/PORT/USER/PASSWORD/NAME` (HTS/TIGIE reference DB), `SUPABASE_URL`, `SUPABASE_JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`.
+- Optional: `DEV_MODE`, `ADMIN_EMAILS` (usage bypass), HTTP host/port via `PORT`.
+- Start locally: `python run_api.py` (reload) or `python run_api_dev.py` (WS-friendly, no reload). Docker build uses the same entrypoint.
+
+## Frontend (Vite + React)
+- Entry: `frontend/src/main.tsx` + `frontend/src/App.tsx` (QueryClient, LanguageProvider, tooltips, routes for intro/auth/app/thank-you).
+- Main UX: `frontend/src/pages/App.tsx` renders header + settings drawer, history sidebar, and `ChatArea`.
+- `frontend/src/components/app/ChatArea.tsx` drives the chat:
+  - Uses WebSocket streaming (`api.classifyStreamWS`) to `/api/classify/ws` with reconnection/backfill; SSE fallback helpers are also present.
+  - Supports express vs detailed modes, HTS vs TIGIE systems, bilingual UI, and tracks pending Q&A batches.
+  - Uploads images to Supabase storage via edge function; attaches signed URLs to classification requests.
+  - Persists chat sessions/messages and completed classifications to Supabase for history replays.
+- `frontend/src/lib/api.ts` wraps Supabase auth, usage checks, history fetch, chat session/message CRUD, classification fetch/save, and streaming clients.
+- Auth is Supabase email/password or magic link (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`). `VITE_API_URL` points the client to the FastAPI host; `VITE_DEV_MODE` skips usage limits.
+
+## Supabase Footprint
+- Migrations (`frontend/supabase/migrations/`):
+  - `profiles` (remaining_uses), `classifications` (hts_code, duty info, warnings, normalized_product, session_id), chat tables `chat_sessions` + `chat_messages` for conversation history, and RLS.
+  - Bucket `product-images` with RLS allowing users to manage their own objects.
+  - RPC `check_user_usage(user_uuid)` used by the API/WebSocket gate.
+- Edge functions:
+  - `frontend/supabase/functions/upload-image/` and `supabase/functions/upload-image/` handle authenticated uploads + signed URLs (slightly different auth keys).
+  - `frontend/supabase/functions/classify/` is a Lovable/Gemini-based classification helper that also decrements usage (legacy/auxiliary vs primary FastAPI flow).
+- Types are generated in `frontend/src/integrations/supabase/types.ts`; client in `frontend/src/integrations/supabase/client.ts`.
+
