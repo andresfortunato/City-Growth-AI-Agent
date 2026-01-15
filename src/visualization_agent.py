@@ -9,7 +9,7 @@ Features:
 4. Error recovery loop for code execution
 5. Connection pooling for production
 6. Execution timing
-7. HTML output saved to /viz directory
+7. HTML output saved to repo-root /viz directory
 
 Usage: uv run visualization_agent.py "Your question here"
 """
@@ -36,7 +36,7 @@ from runner import execute_code_node
 load_dotenv()
 
 MODEL_ID = os.getenv("MODEL_OVERRIDE", "google_genai:gemini-2.0-flash")
-VIZ_DIR = Path(__file__).parent / "viz"
+VIZ_DIR = Path(__file__).resolve().parent.parent / "viz"
 
 
 def setup_model():
@@ -227,7 +227,7 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
     print(analysis)
     print("=" * 80)
 
-    # Save HTML visualization to /viz directory
+    # Save HTML visualization to repo-root /viz directory
     artifact_saved_path = None
     if save_viz and result.get("artifact_html") and result.get("workspace"):
         VIZ_DIR.mkdir(exist_ok=True)
@@ -259,7 +259,7 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Visualization Agent - Ask questions and get visualizations")
     parser.add_argument("question", type=str, help="Your question")
-    parser.add_argument("--no-save", action="store_true", help="Don't save HTML to /viz directory")
+    parser.add_argument("--no-save", action="store_true", help="Don't save HTML to repo-root /viz directory")
     args = parser.parse_args()
 
     result = classify_single(args.question, save_viz=not args.no_save)
