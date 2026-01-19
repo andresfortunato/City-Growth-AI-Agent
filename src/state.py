@@ -52,3 +52,8 @@ class VisualizationState(TypedDict, total=False):
     warnings: Optional[List[str]]
     request_valid: Optional[bool]
     clarification_needed: Optional[str]
+
+    # SQL review loop tracking
+    sql_review_passed: Optional[bool]
+    sql_review_feedback: Optional[str]
+    sql_attempts: Optional[int]

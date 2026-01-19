@@ -16,7 +16,8 @@ from models import IntentClassification, PlotlyCodeOutput, AnalysisOutput
 from prompts import (
     INTENT_CLASSIFICATION_PROMPT,
     GENERATE_PLOTLY_PROMPT,
-    ANALYZE_WITH_ARTIFACT_PROMPT
+    ANALYZE_WITH_ARTIFACT_PROMPT,
+    SQL_REVIEW_PROMPT
 )
 
 
@@ -180,6 +181,70 @@ def validate_columns(state: dict) -> dict:
     except Exception:
         # Graceful degradation: pass through unchanged
         return {}
+
+
+def review_sql(state: dict, model) -> dict:
+    """
+    Review the generated SQL to ensure it matches user intent.
+
+    This is the key anti-hallucination check that catches queries like
+    "SELECT MAX(year)" when the user asked for CAGR calculations.
+
+    Returns:
+        sql_review_passed: bool - whether SQL passes review
+        sql_review_feedback: str - feedback if failed (used for retry)
+        sql_attempts: int - incremented attempt counter
+    """
+    from logger import log_run, log_warning
+
+    user_query = state["messages"][0].content if hasattr(state["messages"][0], 'content') else state["messages"][0]["content"]
+    current_attempts = state.get("sql_attempts", 1)
+
+    prompt = SQL_REVIEW_PROMPT.format(
+        user_request=user_query,
+        generated_sql=state.get("generated_sql", ""),
+        columns=state.get("columns", []),
+        row_count=state.get("row_count", 0),
+        data_preview=state.get("data_preview", "")
+    )
+
+    try:
+        response = model.invoke([{"role": "user", "content": prompt}])
+
+        # Extract text from response
+        if isinstance(response.content, list):
+            result = response.content[0].get('text', '') if response.content else ''
+        else:
+            result = str(response.content)
+
+        result = result.strip()
+
+        if result.upper().startswith("PASS"):
+            log_warning(f"SQL review PASSED (attempt {current_attempts})")
+            return {
+                "sql_review_passed": True,
+                "sql_review_feedback": None,
+                "sql_attempts": current_attempts
+            }
+        else:
+            # Extract feedback after "FAIL:"
+            feedback = result.replace("FAIL:", "").replace("FAIL", "").strip()
+
+            log_warning(f"SQL review FAILED (attempt {current_attempts}): {feedback[:200]}")
+
+            return {
+                "sql_review_passed": False,
+                "sql_review_feedback": feedback,
+                "sql_attempts": current_attempts + 1
+            }
+    except Exception as e:
+        log_warning(f"SQL review error: {e}")
+        # On error, let it pass (don't block workflow)
+        return {
+            "sql_review_passed": True,
+            "sql_review_feedback": None,
+            "sql_attempts": current_attempts
+        }
 
 
 def generate_plotly_code(state: dict, model) -> dict:

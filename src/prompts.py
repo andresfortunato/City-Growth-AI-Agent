@@ -82,6 +82,55 @@ Provide:
 Keep the response concise. The user will see the chart alongside your text."""
 
 
+SQL_REVIEW_PROMPT = """You are a SQL query reviewer validating that a query matches the user's request.
+
+USER REQUEST: {user_request}
+
+GENERATED SQL:
+{generated_sql}
+
+QUERY RESULT PREVIEW:
+- Columns: {columns}
+- Row count: {row_count}
+- Data preview:
+{data_preview}
+
+VALIDATION CHECKLIST:
+1. Does the query retrieve the correct METRICS mentioned in the request?
+   - Employment data: annual_avg_emplvl
+   - Wage data: avg_annual_pay, total_annual_wages, annual_avg_wkly_wage
+   - Establishments: annual_avg_estabs_count
+
+2. Does the query filter for the correct LOCATIONS (cities/states)?
+   - Check if WHERE clause includes the requested areas
+   - If user mentions N cities, we should have data for ~N cities
+
+3. Does the query cover the correct TIME RANGE?
+   - Check year filtering matches the request
+
+4. For CALCULATIONS (growth, CAGR, change, comparison):
+   - CAGR formula: ((end_value / start_value) ^ (1/years) - 1) * 100
+   - Growth: (end_value - start_value) / start_value * 100
+   - Does the query perform the calculation or just return raw data?
+   - If user asks for "growth" or "CAGR", the query MUST calculate it
+
+5. Is the ROW COUNT reasonable?
+   - If user asks for 7 cities and we get 1 row, something is wrong
+   - If user asks for trends over 10 years and we get 1 row, something is wrong
+   - A bar chart comparison needs multiple rows (one per entity)
+
+RESPOND WITH ONE OF:
+- "PASS" - if the query correctly addresses the user's request
+- "FAIL: <specific feedback>" - if the query is wrong, explain what needs to be fixed
+
+Be strict. If the query doesn't calculate what the user asked for, it should FAIL.
+Examples of failures:
+- User asks for CAGR, query returns raw values without calculation -> FAIL
+- User asks for 7 cities, query returns 1 row -> FAIL
+- User asks for wages, query only returns year -> FAIL
+"""
+
+
 FIX_CODE_PROMPT = """The following Python code failed with an error. Fix it.
 
 ORIGINAL CODE:

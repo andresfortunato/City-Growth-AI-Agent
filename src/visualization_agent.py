@@ -30,7 +30,7 @@ from langgraph.graph import END, START, StateGraph
 
 from state import VisualizationState
 from tools import execute_query_with_handoff
-from visualization_nodes import classify_intent, validate_columns, generate_plotly_code, analyze_with_artifact, validate_request_feasibility
+from visualization_nodes import classify_intent, validate_columns, generate_plotly_code, analyze_with_artifact, validate_request_feasibility, review_sql
 from runner import execute_code_node
 from logger import log_run, log_warning
 
@@ -47,8 +47,8 @@ def setup_model():
         #os.environ["GEMINI_API_KEY"] = gemini_key
         os.environ["GOOGLE_API_KEY"] = gemini_key
 
-    # temperature=0 ensures consistent outputs for identical inputs
-    return init_chat_model(MODEL_ID, temperature=0)
+    # temperature=1 allows more creative SQL generation for complex requests
+    return init_chat_model(MODEL_ID, temperature=1)
 
 
 def setup_database():
@@ -104,6 +104,32 @@ RULES:
 6. For aggregations, use AVG/MAX to handle duplicates (same area_fips)
 7. NEVER use DELETE, UPDATE, INSERT, DROP
 8. You MUST use the sql_db_query tool to execute queries
+
+CALCULATION REQUIREMENTS:
+- If user asks for "growth" or "change": Calculate percentage change = (end - start) / start * 100
+- If user asks for "CAGR" (Compound Annual Growth Rate):
+  Use formula: (POWER(end_value::numeric / start_value, 1.0 / num_years) - 1) * 100
+- If user asks for "comparison": Get data for ALL entities being compared (not just one)
+- For bar chart comparisons: Ensure one row per entity (city, year, etc.)
+
+EXAMPLE - CAGR for multiple cities:
+If user asks "CAGR of employment between 2014 and 2024 for Boston, Austin, Miami":
+```sql
+WITH city_data AS (
+  SELECT area_title,
+         MAX(CASE WHEN year = 2014 THEN annual_avg_emplvl END) as emp_start,
+         MAX(CASE WHEN year = 2024 THEN annual_avg_emplvl END) as emp_end
+  FROM msa_wages_employment_data
+  WHERE (area_title ILIKE '%Boston%' OR area_title ILIKE '%Austin%' OR area_title ILIKE '%Miami%')
+    AND year IN (2014, 2024) AND qtr = 'A'
+  GROUP BY area_title
+)
+SELECT area_title,
+       ROUND((POWER(emp_end::numeric / NULLIF(emp_start, 0), 1.0 / 10) - 1) * 100, 2) as employment_cagr_pct
+FROM city_data
+WHERE emp_start > 0 AND emp_end > 0;
+```
+For BOTH employment AND wage CAGR, add both calculations to the SELECT clause.
 """
 
     def classify_intent_node(state):
@@ -111,8 +137,15 @@ RULES:
 
     def generate_query_node(state):
         llm_with_tools = model.bind_tools([run_query_tool], tool_choice="any")
+
+        # Include feedback from previous SQL review if this is a retry
+        system_prompt = generate_query_system_prompt
+        sql_feedback = state.get("sql_review_feedback")
+        if sql_feedback:
+            system_prompt += f"\n\nPREVIOUS ATTEMPT FEEDBACK (you must address this):\n{sql_feedback}"
+
         response = llm_with_tools.invoke(
-            [{"role": "system", "content": generate_query_system_prompt}] + list(state["messages"])
+            [{"role": "system", "content": system_prompt}] + list(state["messages"])
         )
         return {"messages": [response]}
 
@@ -176,6 +209,9 @@ RULES:
     def validate_request_node(state):
         return validate_request_feasibility(state, model)
 
+    def review_sql_node(state):
+        return review_sql(state, model)
+
     def clarify_node(state):
         """Return clarification message to user instead of proceeding."""
         clarification = state.get("clarification_needed", "Could you please clarify your request?")
@@ -191,10 +227,27 @@ RULES:
             return "generate_query"
         return "clarify"
 
-    def route_by_intent(state) -> Literal["analyze_results", "validate_columns"]:
-        if state.get("intent") in ["visualize", "multi_chart"] and state.get("workspace"):
-            return "validate_columns"
-        return "analyze_results"
+    def route_after_sql_review(state) -> Literal["generate_query", "validate_columns", "analyze_results"]:
+        """Route based on SQL review results - implements the retry loop."""
+        MAX_SQL_ATTEMPTS = 3
+
+        if state.get("sql_review_passed", True):
+            # SQL is good, proceed based on intent
+            if state.get("intent") in ["visualize", "multi_chart"] and state.get("workspace"):
+                return "validate_columns"
+            return "analyze_results"
+
+        # SQL review failed - check attempt count
+        attempts = state.get("sql_attempts", 1)
+        if attempts >= MAX_SQL_ATTEMPTS:
+            # Max attempts reached, proceed anyway with warning
+            log_warning(f"SQL review failed after {attempts} attempts, proceeding anyway")
+            if state.get("intent") in ["visualize", "multi_chart"] and state.get("workspace"):
+                return "validate_columns"
+            return "analyze_results"
+
+        # Retry SQL generation with feedback
+        return "generate_query"
 
     def route_after_execution(state) -> Literal["analyze_artifact", "generate_plotly", END]:
         if state.get("execution_success"):
@@ -218,6 +271,7 @@ RULES:
     builder.add_node("clarify", clarify_node)
     builder.add_node("generate_query", generate_query_node)
     builder.add_node("run_query", run_query_node)
+    builder.add_node("review_sql", review_sql_node)
     builder.add_node("validate_columns", validate_columns_node)
     builder.add_node("analyze_results", analyze_results_node)
     builder.add_node("generate_plotly", generate_plotly_node)
@@ -229,7 +283,8 @@ RULES:
     builder.add_conditional_edges("validate_request", route_after_validation)
     builder.add_edge("clarify", END)
     builder.add_conditional_edges("generate_query", should_continue)
-    builder.add_conditional_edges("run_query", route_by_intent)
+    builder.add_edge("run_query", "review_sql")
+    builder.add_conditional_edges("review_sql", route_after_sql_review)
     builder.add_edge("validate_columns", "generate_plotly")
     builder.add_edge("generate_plotly", "execute_code")
     builder.add_conditional_edges("execute_code", route_after_execution)
@@ -261,6 +316,9 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
         "workspace": None,
         "execution_success": False,
         "retry_count": 0,
+        "sql_attempts": 1,
+        "sql_review_passed": None,
+        "sql_review_feedback": None,
     }
 
     result = agent.invoke(initial_state)
@@ -317,7 +375,9 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
             "row_count": row_count,
             "chart_type": result.get("chart_type"),
             "num_charts": result.get("num_charts", 0),
-            "artifact_saved": artifact_saved_path is not None
+            "artifact_saved": artifact_saved_path is not None,
+            "sql_attempts": result.get("sql_attempts", 1),
+            "sql_review_passed": result.get("sql_review_passed")
         }
     )
 

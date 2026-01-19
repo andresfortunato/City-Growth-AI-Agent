@@ -7,11 +7,11 @@ Runs all test cases from evaluation_dataset.json and generates a report.
 Usage:
     cd src
     source ../.venv/bin/activate
-    python ../tests/run_evaluation.py
+    python ../evals/run_evaluation.py
 
 Output:
     - Console summary of pass/fail
-    - Detailed JSON report in tests/evaluation_results_{timestamp}.json
+    - Detailed JSON report in evals/evaluation_results_{timestamp}.json
 """
 
 import json
@@ -191,7 +191,9 @@ def run_evaluation():
         "results": results
     }
 
-    report_path = Path(__file__).parent / f"evaluation_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    evals_dir = Path(__file__).parent.resolve()
+    evals_dir.mkdir(parents=True, exist_ok=True)
+    report_path = evals_dir / f"evaluation_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(report_path, "w") as f:
         json.dump(report, f, indent=2)
 

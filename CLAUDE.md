@@ -8,5 +8,6 @@
 - Try to make scripts as short, minimalistic and straightforward as possible.
 - Database is hosted locally, credentials are in .env and you can use them to inspect it. 
 - Do not write summary files, ask user if he wants a summary file.
+- All .md files should go in the /docs folder
 
 ## Repo Map
