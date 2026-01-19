@@ -47,3 +47,8 @@ class VisualizationState(TypedDict, total=False):
 
     # Timing
     execution_time_seconds: Optional[float]
+
+    # NEW: Track warnings and validation status
+    warnings: Optional[List[str]]
+    request_valid: Optional[bool]
+    clarification_needed: Optional[str]

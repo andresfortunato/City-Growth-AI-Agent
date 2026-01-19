@@ -49,13 +49,108 @@ def classify_intent(state: dict, model) -> dict:
             "classify_time_ms": elapsed
         }
     except Exception as e:
-        # Graceful degradation: default to answer intent
+        # Log the error instead of silent degradation
+        from logger import log_warning
+        warning = log_warning(f"Intent classification failed: {e}. Defaulting to 'answer' mode.")
         return {
             "intent": "answer",
             "suggested_chart_types": [],
             "num_charts": 0,
-            "intent_reasoning": f"Classification failed, defaulting to answer: {e}"
+            "intent_reasoning": f"Classification failed, defaulting to answer: {e}",
+            "warnings": [warning]
         }
+
+
+def validate_request_feasibility(state: dict, model) -> dict:
+    """
+    Check if the user's request can be answered with available data.
+    If not, generate a clarifying question.
+
+    This prevents hallucination where the agent generates wrong output
+    for impossible queries (e.g., "show GDP" when we don't have GDP data).
+    """
+    user_query = state["messages"][-1].content if hasattr(state["messages"][-1], 'content') else state["messages"][-1]["content"]
+    intent = state.get("intent", "answer")
+
+    # Validate ALL intents, not just visualization requests
+    # Note: intent should always be set by classify_intent, but default to "answer"
+
+    # Available columns in our database
+    AVAILABLE_COLUMNS = [
+        "area_fips", "year", "qtr", "annual_avg_estabs_count", "annual_avg_emplvl",
+        "total_annual_wages", "avg_annual_pay", "annual_avg_wkly_wage",
+        "area_title", "state"
+    ]
+
+    AVAILABLE_METRICS = [
+        "employment", "wages", "pay", "establishments", "weekly wage",
+        "annual pay", "employment level"
+    ]
+
+    validation_prompt = f"""You are validating if a data visualization request can be fulfilled.
+
+AVAILABLE DATA:
+- Table: msa_wages_employment_data (US Metropolitan Statistical Areas)
+- Columns: {', '.join(AVAILABLE_COLUMNS)}
+- Years: 2000-2024
+- Geographic: US MSAs (cities/metro areas) with area_title and state
+- Metrics: Employment levels, wages, pay, establishments, trends over time
+
+UNAVAILABLE DATA (reject these):
+- GDP (Gross Domestic Product)
+- Population
+- Housing prices
+- Cost of living
+- Stock prices
+- Revenue
+- Profit
+- Market share
+
+USER REQUEST: {user_query}
+
+TASK: Determine if this request can be answered with the available data.
+
+IMPORTANT: Check for mentions of unavailable metrics (GDP, population, housing, cost of living, etc.).
+Even if the request includes words like "show" or "visualize", if it's asking for unavailable data, respond with a clarification.
+
+If the request asks for data we DON'T have, respond with a clarifying question suggesting what we CAN provide.
+
+If the request CAN be answered with available metrics, respond with "VALID".
+
+Examples:
+- "Show GDP trends" → "I don't have GDP data. Would you like to see wage or employment trends instead?"
+- "Population of cities" → "I don't have population data. I can show employment levels which indicate workforce size. Would that help?"
+- "Wage trends for Austin" → "VALID"
+- "Employment in California cities" → "VALID"
+"""
+
+    try:
+        response = model.invoke([{"role": "user", "content": validation_prompt}])
+
+        # Extract text from response (handle both string and list formats)
+        if isinstance(response.content, list):
+            result = response.content[0].get('text', '') if response.content else ''
+        else:
+            result = str(response.content)
+
+        result = result.strip()
+
+        # Check if response indicates the request is valid
+        # Only "VALID" (exact match or starting with VALID) means proceed
+        if result.upper() == "VALID" or result.upper().startswith("VALID"):
+            return {"request_valid": True}
+        else:
+            # Request needs clarification - response contains clarifying message
+            return {
+                "request_valid": False,
+                "clarification_needed": result,
+                "warnings": [f"Request validation flagged: {result[:100]}"]
+            }
+    except Exception as e:
+        # On error, proceed anyway (don't block the workflow)
+        from logger import log_warning
+        warning = log_warning(f"Validation check failed: {e}")
+        return {"request_valid": True, "warnings": [warning]}
 
 
 def validate_columns(state: dict) -> dict:
@@ -124,12 +219,15 @@ def generate_plotly_code(state: dict, model) -> dict:
             "retry_count": 0
         }
     except Exception as e:
-        # Graceful degradation
+        from logger import log_warning
+        warning = log_warning(f"Code generation failed: {e}")
         return {
             "plotly_code": None,
             "chart_type": None,
             "columns_used": [],
-            "code_generation_error": str(e)
+            "code_generation_error": str(e),
+            "execution_success": False,
+            "warnings": [warning]
         }
 
 
@@ -179,9 +277,18 @@ def analyze_with_artifact(state: dict, model) -> dict:
             "messages": state["messages"] + [AIMessage(content=analysis_text)]
         }
     except Exception as e:
-        # Graceful degradation
+        from logger import log_warning
+        warning = log_warning(f"Analysis generation failed: {e}")
+
+        # Still try to read artifact HTML if it exists
+        artifact_html = None
+        if workspace and workspace.output_path.exists():
+            with open(workspace.output_path, 'r') as f:
+                artifact_html = f.read()
+
         return {
             "analysis": f"Chart generated but analysis failed: {e}",
-            "artifact_html": None,
-            "artifact_path": str(workspace.output_path) if workspace else None
+            "artifact_html": artifact_html,
+            "artifact_path": str(workspace.output_path) if workspace else None,
+            "warnings": [warning]
         }

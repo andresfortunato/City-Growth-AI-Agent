@@ -13,12 +13,11 @@ TASK: Classify the user's request into one of three categories:
 - "multi_chart": User wants multiple different charts (e.g., "show wages AND employment trends")
 
 Also identify appropriate chart types:
-- Time series (year/date on x-axis): line
-- Category comparisons: bar
-- Distributions: histogram or box
-- Correlations: scatter
-- Rankings: horizontal bar
-- Geographic: choropleth
+- Time series (year/date on x-axis): line chart
+- Category comparisons and rankings: bar chart   
+- Distributions: histogram or box chart
+- Correlations, relationships or visualizations that require two variables: scatter plot
+- Geographic: choropleth map
 
 MULTI-CHART DETECTION:
 - "Show wages AND employment trends" → multi_chart (2 charts)
@@ -55,13 +54,14 @@ CHART TYPE GUIDELINES:
 - Rankings: Use px.bar() with horizontal orientation
 - Multi-city comparison over time: Use px.line() with color= parameter
 
-VISUALIZATION BEST PRACTICES:
-- For bar charts with many categories or long labels: ALWAYS use orientation='h' (horizontal)
+VISUALIZATION RULES:
+- Bar charts should always be horizontal for readability  
 - For rankings: Sort data appropriately before plotting
 - Use clear, descriptive titles
+- Always add the name of the city or area to the title of the chart (unless the label or legend already shows city or area names)
 - Format axis labels (e.g., "${{:,.0f}}" for currency)
 - Add hover data for interactivity
-
+- When doing a multi-chart, always display them in the same output as subplots, unless they are line charts, in which case plot both lines in the same chart with secondary y-axis. 
 Generate complete, runnable Python code."""
 
 
@@ -76,6 +76,8 @@ A chart has been generated showing data with:
 Provide:
 1. A brief description of what the chart shows (1-2 sentences)
 2. 2-3 key insights or trends visible in the data
+3. If the chart is a multi-chart, describe the relationship between the charts
+4. If the chart is a time series, focus both on the long term trend and any short term changes.
 
 Keep the response concise. The user will see the chart alongside your text."""
 

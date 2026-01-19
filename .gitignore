@@ -1,2 +1,6 @@
 # Visualization outputs
 viz/*.html
+src/viz/*.html
+tests/*.json
+logs/*.jsonl
+evals/*.json

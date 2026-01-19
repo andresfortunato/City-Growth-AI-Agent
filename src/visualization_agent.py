@@ -9,7 +9,7 @@ Features:
 4. Error recovery loop for code execution
 5. Connection pooling for production
 6. Execution timing
-7. HTML output saved to repo-root /viz directory
+7. HTML output saved to /viz directory
 
 Usage: uv run visualization_agent.py "Your question here"
 """
@@ -30,22 +30,25 @@ from langgraph.graph import END, START, StateGraph
 
 from state import VisualizationState
 from tools import execute_query_with_handoff
-from visualization_nodes import classify_intent, validate_columns, generate_plotly_code, analyze_with_artifact
+from visualization_nodes import classify_intent, validate_columns, generate_plotly_code, analyze_with_artifact, validate_request_feasibility
 from runner import execute_code_node
+from logger import log_run, log_warning
 
 load_dotenv()
 
-MODEL_ID = os.getenv("MODEL_OVERRIDE", "google_genai:gemini-2.0-flash")
-VIZ_DIR = Path(__file__).resolve().parent.parent / "viz"
+MODEL_ID = os.getenv("MODEL_OVERRIDE", "google_genai:gemini-3-flash-preview")
+VIZ_DIR = Path(__file__).parent.parent / "viz"
 
 
 def setup_model():
-    """Initialize the chat model."""
+    """Initialize the chat model with deterministic settings."""
     gemini_key = os.getenv("GEMINI_API_KEY")
     if gemini_key:
-        os.environ["GEMINI_API_KEY"] = gemini_key
+        #os.environ["GEMINI_API_KEY"] = gemini_key
         os.environ["GOOGLE_API_KEY"] = gemini_key
-    return init_chat_model(MODEL_ID)
+
+    # temperature=0 ensures consistent outputs for identical inputs
+    return init_chat_model(MODEL_ID, temperature=0)
 
 
 def setup_database():
@@ -86,13 +89,21 @@ Table: msa_wages_employment_data
 - total_annual_wages, avg_annual_pay, annual_avg_wkly_wage
 - area_title, state
 
+IMPORTANT:
+- area_title contains full MSA names (e.g., "Boston-Cambridge-Newton, MA-NH")
+- state contains 2-letter state codes ONLY (e.g., 'CA', 'TX', 'NY', not 'California')
+
 RULES:
 1. ALWAYS use qtr = 'A' for annual data
 2. For MSA names, use ILIKE with wildcards: WHERE area_title ILIKE '%Austin%' (NOT exact matches)
-3. ORDER BY year ASC for trends
-4. For aggregations, use AVG/MAX to handle duplicates (same area_fips)
-5. NEVER use DELETE, UPDATE, INSERT, DROP
-6. You MUST use the sql_db_query tool to execute queries
+3. For state filtering, use 2-letter state codes: WHERE state = 'CA' or WHERE state IN ('CA', 'TX')
+   Common state codes: CA=California, TX=Texas, NY=New York, FL=Florida, AZ=Arizona,
+   NM=New Mexico, MA=Massachusetts, IL=Illinois, WA=Washington, CO=Colorado
+4. NEVER use ILIKE for state column - it contains codes, not full names
+5. ORDER BY year ASC for trends
+6. For aggregations, use AVG/MAX to handle duplicates (same area_fips)
+7. NEVER use DELETE, UPDATE, INSERT, DROP
+8. You MUST use the sql_db_query tool to execute queries
 """
 
     def classify_intent_node(state):
@@ -115,6 +126,15 @@ RULES:
         query = last_message.tool_calls[0]["args"]["query"]
         result = execute_query_with_handoff(db, query, intent=state.get("intent", "answer"))
 
+        # Check for empty results when visualization is needed
+        if state.get("intent") in ["visualize", "multi_chart"]:
+            if result["row_count"] == 0:
+                return {
+                    "sql_valid": False,
+                    "execution_error": "Query returned 0 rows. Cannot create visualization. Please refine your query.",
+                    "warnings": [f"Empty result for query: {query[:100]}..."]
+                }
+
         return {
             "generated_sql": query,
             "sql_valid": result["success"],
@@ -131,7 +151,18 @@ RULES:
         user_q = state["messages"][0].content if len(state["messages"]) > 0 else "Unknown"
         prompt = f"Analyze this data for: {user_q}\n\nData:\n{state.get('data_preview', 'No data')}"
         response = model.invoke([{"role": "user", "content": prompt}])
-        return {"analysis": response.content, "messages": [AIMessage(content=response.content)]}
+
+        # Extract text from response (handle both string and list formats)
+        if isinstance(response.content, list):
+            analysis_text = response.content[0].get('text', '') if response.content else ''
+        else:
+            analysis_text = str(response.content)
+
+        return {
+            "analysis": analysis_text,
+            "messages": [AIMessage(content=analysis_text)],
+            "execution_success": True
+        }
 
     def generate_plotly_node(state):
         return generate_plotly_code(state, model)
@@ -142,7 +173,24 @@ RULES:
     def analyze_artifact_node(state):
         return analyze_with_artifact(state, model)
 
+    def validate_request_node(state):
+        return validate_request_feasibility(state, model)
+
+    def clarify_node(state):
+        """Return clarification message to user instead of proceeding."""
+        clarification = state.get("clarification_needed", "Could you please clarify your request?")
+        return {
+            "messages": [AIMessage(content=clarification)],
+            "analysis": clarification,
+            "execution_success": False
+        }
+
     # Routing functions
+    def route_after_validation(state) -> Literal["generate_query", "clarify"]:
+        if state.get("request_valid", True):
+            return "generate_query"
+        return "clarify"
+
     def route_by_intent(state) -> Literal["analyze_results", "validate_columns"]:
         if state.get("intent") in ["visualize", "multi_chart"] and state.get("workspace"):
             return "validate_columns"
@@ -166,6 +214,8 @@ RULES:
     builder = StateGraph(VisualizationState)
 
     builder.add_node("classify_intent", classify_intent_node)
+    builder.add_node("validate_request", validate_request_node)
+    builder.add_node("clarify", clarify_node)
     builder.add_node("generate_query", generate_query_node)
     builder.add_node("run_query", run_query_node)
     builder.add_node("validate_columns", validate_columns_node)
@@ -175,7 +225,9 @@ RULES:
     builder.add_node("analyze_artifact", analyze_artifact_node)
 
     builder.add_edge(START, "classify_intent")
-    builder.add_edge("classify_intent", "generate_query")
+    builder.add_edge("classify_intent", "validate_request")
+    builder.add_conditional_edges("validate_request", route_after_validation)
+    builder.add_edge("clarify", END)
     builder.add_conditional_edges("generate_query", should_continue)
     builder.add_conditional_edges("run_query", route_by_intent)
     builder.add_edge("validate_columns", "generate_plotly")
@@ -190,6 +242,7 @@ RULES:
 def classify_single(question: str, save_viz: bool = True) -> dict:
     """Classify a single question using the visualization agent."""
     start_time = time.time()
+    warnings = []  # Collect warnings during execution
 
     print("Initializing Visualization Agent...")
     model = setup_model()
@@ -220,6 +273,16 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
             analysis = msg.content
             break
 
+    # Check for empty results - mark as failure if row_count=0 for answer intent
+    execution_success = result.get("execution_success", False)
+    row_count = result.get("row_count", 0)
+    intent = result.get("intent", "answer")
+
+    if intent == "answer" and row_count == 0:
+        execution_success = False
+        if not analysis or "data found" not in analysis.lower():
+            analysis = "No data found for your query. Please refine your request or check the city/state names."
+
     # Print analysis to terminal
     print("\n" + "=" * 80)
     print("ANALYSIS:")
@@ -227,7 +290,7 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
     print(analysis)
     print("=" * 80)
 
-    # Save HTML visualization to repo-root /viz directory
+    # Save HTML visualization to /viz directory
     artifact_saved_path = None
     if save_viz and result.get("artifact_html") and result.get("workspace"):
         VIZ_DIR.mkdir(exist_ok=True)
@@ -242,16 +305,32 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
 
     print(f"\nExecution time: {execution_time:.2f} seconds")
 
+    # Log the run before returning
+    log_run(
+        query=question,
+        intent=intent,
+        success=execution_success,
+        execution_time_seconds=round(execution_time, 2),
+        error=result.get("execution_error"),
+        warnings=result.get("warnings", []),
+        metadata={
+            "row_count": row_count,
+            "chart_type": result.get("chart_type"),
+            "num_charts": result.get("num_charts", 0),
+            "artifact_saved": artifact_saved_path is not None
+        }
+    )
+
     return {
         "analysis": analysis,
-        "intent": result.get("intent", "answer"),
+        "intent": intent,
         "num_charts": result.get("num_charts", 0),
         "artifact_html": result.get("artifact_html"),
         "artifact_path": artifact_saved_path,
         "chart_type": result.get("chart_type"),
-        "execution_success": result.get("execution_success", False),
+        "execution_success": execution_success,
         "execution_attempts": result.get("execution_attempts", 1),
-        "row_count": result.get("row_count", 0),
+        "row_count": row_count,
         "execution_time_seconds": round(execution_time, 2)
     }
 
@@ -259,7 +338,7 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Visualization Agent - Ask questions and get visualizations")
     parser.add_argument("question", type=str, help="Your question")
-    parser.add_argument("--no-save", action="store_true", help="Don't save HTML to repo-root /viz directory")
+    parser.add_argument("--no-save", action="store_true", help="Don't save HTML to /viz directory")
     args = parser.parse_args()
 
     result = classify_single(args.question, save_viz=not args.no_save)
