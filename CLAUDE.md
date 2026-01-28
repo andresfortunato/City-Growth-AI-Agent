@@ -1,8 +1,8 @@
-# This is an AI agent for product classification in customs using HTS (US) and TIGIE (MX)
+# This is an AI agent for data analysis, visualization and city growth diagnostics that will interact with economic data like QCEW MSA wage and employment data stored in Postgres (other data like industry-city level employment, housing costs, and amenities forthcoming)
 
 # Rules
 - ALWAYS use source .venv/bin/activate && or uv run for running python scripts
-- NEVER USE GIT TO REVERT CHANGES, SO THAT WE DO NOT LOSE LOCAL UNCOMMITED EDITS.
+- NEVER REVERT CHANGES in GIT
 - Always come up with diagnostics, a plan, and ask for approval before executing
 - Avoid multiplication of files, whenever possible keep codebase minimal
 - Try to make scripts as short, minimalistic and straightforward as possible.
