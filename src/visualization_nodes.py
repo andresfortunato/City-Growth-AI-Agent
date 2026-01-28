@@ -12,12 +12,13 @@ import time
 from typing import Optional
 from langchain_core.messages import AIMessage
 
-from models import IntentClassification, PlotlyCodeOutput, AnalysisOutput
+from models import IntentClassification, PlotlyCodeOutput, AnalysisOutput, QueryPlan
 from prompts import (
     INTENT_CLASSIFICATION_PROMPT,
     GENERATE_PLOTLY_PROMPT,
     ANALYZE_WITH_ARTIFACT_PROMPT,
-    SQL_REVIEW_PROMPT
+    SQL_REVIEW_PROMPT,
+    QUERY_PLAN_PROMPT
 )
 
 
@@ -58,6 +59,48 @@ def classify_intent(state: dict, model) -> dict:
             "suggested_chart_types": [],
             "num_charts": 0,
             "intent_reasoning": f"Classification failed, defaulting to answer: {e}",
+            "warnings": [warning]
+        }
+
+
+def plan_queries(state: dict, model) -> dict:
+    """
+    Decompose the user's request into a structured query plan.
+
+    This node runs BEFORE SQL generation and produces a detailed plan
+    that guides the SQL generator. It prevents the LLM from writing
+    incomplete queries (e.g., SELECT MAX(year) when user wants time series).
+    """
+    user_query = state["messages"][0].content if hasattr(state["messages"][0], 'content') else state["messages"][0]["content"]
+
+    prompt = QUERY_PLAN_PROMPT.format(user_request=user_query)
+
+    structured_model = model.with_structured_output(QueryPlan)
+
+    try:
+        response = structured_model.invoke([
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": f"Plan the query strategy for: {user_query}"}
+        ])
+
+        # Format the plan as guidance text for the SQL generator
+        plan_text = (
+            f"DATA REQUIREMENTS: {response.data_requirements}\n"
+            f"SQL STRATEGY: {response.sql_strategy}\n"
+            f"EXPECTED COLUMNS: {', '.join(response.expected_columns)}\n"
+            f"EXPECTED ROWS: {response.expected_row_estimate}"
+        )
+
+        return {
+            "query_plan": plan_text,
+            "query_plan_reasoning": response.sql_strategy
+        }
+    except Exception as e:
+        from logger import log_warning
+        warning = log_warning(f"Query planning failed: {e}")
+        return {
+            "query_plan": None,
+            "query_plan_reasoning": None,
             "warnings": [warning]
         }
 

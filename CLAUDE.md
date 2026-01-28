@@ -11,3 +11,29 @@
 - All .md files should go in the /docs folder
 
 ## Repo Map
+```
+City-Growth-AI-Agent/
+├── src/                      # Core agent code
+│   ├── visualization_agent.py      # LangGraph entry point + orchestration
+│   ├── visualization_nodes.py      # Agent nodes for intent, SQL, plotting, analysis
+│   ├── tools.py                    # SQL execution + CSV handoff tooling
+│   ├── workspace.py                # Job workspace lifecycle and paths
+│   ├── runner.py                   # Safe code execution with retries
+│   ├── validator.py                # Code safety checks for generated scripts
+│   ├── models.py                   # Pydantic schemas for structured outputs
+│   ├── state.py                    # Agent state definition + reducers
+│   ├── prompts.py                  # System prompts for LLM behaviors
+│   └── logger.py                   # JSONL run logging
+├── ETL/                      # R scripts + raw QCEW CSV
+├── database/                 # SQL maintenance scripts + DB notes
+├── viz/                      # Saved HTML chart artifacts
+├── logs/                     # JSONL run logs
+├── evals/                    # Evaluation runner
+├── tests/                    # Unit/integration/perf tests
+├── docs/old/                 # Design notes and plans
+├── references/               # Reference workflows
+├── scripts/                  # Utilities (LangSmith trace)
+├── old/                      # Legacy code
+├── pyproject.toml
+└── uv.lock
+```

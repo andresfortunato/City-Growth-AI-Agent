@@ -4,3 +4,5 @@ src/viz/*.html
 tests/*.json
 logs/*.jsonl
 evals/*.json
+ETL/data_exploration/2024_annual_by_industry/*.csv  # raw data exploration files
+ETL/data_exploration/*

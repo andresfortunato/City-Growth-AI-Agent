@@ -30,7 +30,7 @@ from langgraph.graph import END, START, StateGraph
 
 from state import VisualizationState
 from tools import execute_query_with_handoff
-from visualization_nodes import classify_intent, validate_columns, generate_plotly_code, analyze_with_artifact, validate_request_feasibility, review_sql
+from visualization_nodes import classify_intent, validate_columns, generate_plotly_code, analyze_with_artifact, validate_request_feasibility, review_sql, plan_queries
 from runner import execute_code_node
 from logger import log_run, log_warning
 
@@ -135,11 +135,19 @@ For BOTH employment AND wage CAGR, add both calculations to the SELECT clause.
     def classify_intent_node(state):
         return classify_intent(state, model)
 
+    def plan_queries_node(state):
+        return plan_queries(state, model)
+
     def generate_query_node(state):
         llm_with_tools = model.bind_tools([run_query_tool], tool_choice="any")
 
-        # Include feedback from previous SQL review if this is a retry
+        # Include query plan from planning node
         system_prompt = generate_query_system_prompt
+        query_plan = state.get("query_plan")
+        if query_plan:
+            system_prompt += f"\n\nQUERY PLAN (you MUST follow this plan):\n{query_plan}"
+
+        # Include feedback from previous SQL review if this is a retry
         sql_feedback = state.get("sql_review_feedback")
         if sql_feedback:
             system_prompt += f"\n\nPREVIOUS ATTEMPT FEEDBACK (you must address this):\n{sql_feedback}"
@@ -222,9 +230,9 @@ For BOTH employment AND wage CAGR, add both calculations to the SELECT clause.
         }
 
     # Routing functions
-    def route_after_validation(state) -> Literal["generate_query", "clarify"]:
+    def route_after_validation(state) -> Literal["plan_queries", "clarify"]:
         if state.get("request_valid", True):
-            return "generate_query"
+            return "plan_queries"
         return "clarify"
 
     def route_after_sql_review(state) -> Literal["generate_query", "validate_columns", "analyze_results"]:
@@ -269,6 +277,7 @@ For BOTH employment AND wage CAGR, add both calculations to the SELECT clause.
     builder.add_node("classify_intent", classify_intent_node)
     builder.add_node("validate_request", validate_request_node)
     builder.add_node("clarify", clarify_node)
+    builder.add_node("plan_queries", plan_queries_node)
     builder.add_node("generate_query", generate_query_node)
     builder.add_node("run_query", run_query_node)
     builder.add_node("review_sql", review_sql_node)
@@ -282,6 +291,7 @@ For BOTH employment AND wage CAGR, add both calculations to the SELECT clause.
     builder.add_edge("classify_intent", "validate_request")
     builder.add_conditional_edges("validate_request", route_after_validation)
     builder.add_edge("clarify", END)
+    builder.add_edge("plan_queries", "generate_query")
     builder.add_conditional_edges("generate_query", should_continue)
     builder.add_edge("run_query", "review_sql")
     builder.add_conditional_edges("review_sql", route_after_sql_review)
