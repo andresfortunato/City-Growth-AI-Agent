@@ -11,7 +11,12 @@ This module provides common test fixtures including:
 import pytest
 from unittest.mock import Mock, MagicMock
 from langchain_core.messages import AIMessage, ToolMessage
-from sql_agent.state import SQLAgentState
+
+# Legacy import - sql_agent is deprecated, fixtures below are for old tests
+try:
+    from sql_agent.state import SQLAgentState
+except ImportError:
+    SQLAgentState = None
 
 
 @pytest.fixture

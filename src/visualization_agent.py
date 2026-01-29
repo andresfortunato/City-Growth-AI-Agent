@@ -29,7 +29,7 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
 from state import VisualizationState
-from tools import execute_query_with_handoff
+from sql_tools import execute_query_with_handoff
 from visualization_nodes import classify_intent, validate_columns, generate_plotly_code, analyze_with_artifact, validate_request_feasibility, review_sql, plan_queries
 from runner import execute_code_node
 from logger import log_run, log_warning
@@ -237,7 +237,7 @@ For BOTH employment AND wage CAGR, add both calculations to the SELECT clause.
 
     def route_after_sql_review(state) -> Literal["generate_query", "validate_columns", "analyze_results"]:
         """Route based on SQL review results - implements the retry loop."""
-        MAX_SQL_ATTEMPTS = 3
+        MAX_SQL_ATTEMPTS = 5  # Increased from 3 for better retry tolerance
 
         if state.get("sql_review_passed", True):
             # SQL is good, proceed based on intent
@@ -401,7 +401,14 @@ def classify_single(question: str, save_viz: bool = True) -> dict:
         "execution_success": execution_success,
         "execution_attempts": result.get("execution_attempts", 1),
         "row_count": row_count,
-        "execution_time_seconds": round(execution_time, 2)
+        "execution_time_seconds": round(execution_time, 2),
+        # Failure context for escalation
+        "sql_attempts": result.get("sql_attempts", 1),
+        "sql_review_passed": result.get("sql_review_passed"),
+        "sql_review_feedback": result.get("sql_review_feedback", ""),
+        "generated_sql": result.get("generated_sql", ""),
+        "execution_error": result.get("execution_error", ""),
+        "warnings": result.get("warnings", []),
     }
 
 

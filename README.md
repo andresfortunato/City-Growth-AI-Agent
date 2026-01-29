@@ -40,11 +40,25 @@ Future direction:
 - Additional datasets beyond QCEW.
 
 ## Quick Start
-```bash
-# Ask for a text answer
-uv run src/visualization_agent.py "What is the average wage in Austin in 2023?"
 
-# Ask for a chart (saved to viz/)
+### Conversational Mode (Recommended)
+```bash
+# Interactive conversation
+uv run src/cli.py
+
+# Single question
+uv run src/cli.py "What is the average wage in Austin in 2023?"
+
+# Multi-turn example
+uv run src/cli.py
+> What cities are available in Texas?
+> Show wage trends for Austin from 2010 to 2024
+> How does that compare to Dallas?
+```
+
+### Direct Workflow Mode
+```bash
+# For direct visualization without conversation context
 uv run src/visualization_agent.py "Create a line chart of wage trends for Austin from 2010 to 2024"
 ```
 
@@ -95,9 +109,17 @@ flowchart TD
 ```
 City-Growth-AI-Agent/
 ├── src/                      # Core agent code
-│   ├── visualization_agent.py      # LangGraph entry point + orchestration
-│   ├── visualization_nodes.py      # Agent nodes for intent, SQL, plotting, analysis
-│   ├── tools.py                    # SQL execution + CSV handoff tooling
+│   ├── cli.py                      # CLI entry point (interactive + single question)
+│   ├── agent.py                    # ReAct conversational agent definition
+│   ├── conversation.py             # Async chat interface
+│   ├── tools/                      # Agent tools
+│   │   ├── __init__.py             # Tool registry
+│   │   ├── workflow_tool.py        # Wraps visualization workflow
+│   │   ├── schema_tools.py         # get_schema, sample_data, list_cities
+│   │   └── query_tool.py           # Direct SQL exploration
+│   ├── visualization_agent.py      # LangGraph workflow for analysis/viz
+│   ├── visualization_nodes.py      # Workflow nodes for intent, SQL, plotting
+│   ├── sql_tools.py                # SQL execution + CSV handoff
 │   ├── workspace.py                # Job workspace lifecycle and paths
 │   ├── runner.py                   # Safe code execution with retries
 │   ├── validator.py                # Code safety checks for generated scripts
@@ -111,7 +133,7 @@ City-Growth-AI-Agent/
 ├── logs/                     # JSONL run logs
 ├── evals/                    # Evaluation runner
 ├── tests/                    # Unit/integration/perf tests
-├── docs/old/                 # Design notes and plans
+├── docs/                     # Design notes and plans
 ├── references/               # Reference workflows
 ├── scripts/                  # Utilities (LangSmith trace)
 ├── old/                      # Legacy code
