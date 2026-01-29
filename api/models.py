@@ -33,7 +33,7 @@ class MessageDetail(BaseModel):
     content: str
     artifact_json: Optional[str] = None
     artifact_path: Optional[str] = None
-    tool_calls: Optional[str] = None  # JSON string of tool calls
+    tool_calls: Optional[List[dict]] = None  # Parsed tool calls array
     created_at: datetime
 
 

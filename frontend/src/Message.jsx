@@ -67,9 +67,7 @@ export default function Message({ message }) {
       {message.tool_calls && message.tool_calls.length > 0 && (
         <div className="message-tools">
           <small>
-            Tools used: {message.tool_calls.map(tc =>
-              typeof tc === 'string' ? JSON.parse(tc) : tc
-            ).map(tc => tc.tool).join(', ')}
+            Tools used: {message.tool_calls.map(tc => tc.tool).join(', ')}
           </small>
         </div>
       )}

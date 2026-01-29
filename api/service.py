@@ -223,7 +223,7 @@ class ChatService:
                     "content": row["content"],
                     "artifact_json": row["artifact_json"],
                     "artifact_path": row["artifact_path"],
-                    "tool_calls": row["tool_calls"],
+                    "tool_calls": json.loads(row["tool_calls"]) if row["tool_calls"] else None,
                     "created_at": row["created_at"],
                 }
                 for row in msg_rows
