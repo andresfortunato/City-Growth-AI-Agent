@@ -7,6 +7,7 @@ execution, and visualization.
 """
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 from langchain_core.tools import tool
@@ -62,6 +63,29 @@ async def data_analysis_workflow(
         if result.get("artifact_path"):
             response_parts.append(f"\nVisualization saved to: {result['artifact_path']}")
 
+            # Try to read JSON spec for web embedding
+            artifact_json = None
+            artifact_path_obj = Path(result["artifact_path"])
+            json_path = artifact_path_obj.with_suffix(".json")
+
+            # Also check workspace for JSON
+            if not json_path.exists() and result.get("workspace"):
+                workspace_json = result["workspace"].json_path
+                if workspace_json.exists():
+                    json_path = workspace_json
+
+            if json_path.exists():
+                try:
+                    artifact_json = json_path.read_text()
+                    # Include as metadata marker for conversation.py to extract
+                    metadata = {
+                        "artifact_json": artifact_json,
+                        "artifact_path": result["artifact_path"],
+                    }
+                    response_parts.append(f"\nARTIFACT_METADATA:{json.dumps(metadata)}")
+                except Exception:
+                    pass
+
         if result.get("row_count"):
             response_parts.append(f"\nData: {result['row_count']} rows analyzed")
 
@@ -71,6 +95,22 @@ async def data_analysis_workflow(
 
         if result.get("artifact_path"):
             response_parts.append(f"\nVisualization saved to: {result['artifact_path']}")
+
+            # Try to read JSON spec for partial success too
+            artifact_json = None
+            artifact_path_obj = Path(result["artifact_path"])
+            json_path = artifact_path_obj.with_suffix(".json")
+
+            if json_path.exists():
+                try:
+                    artifact_json = json_path.read_text()
+                    metadata = {
+                        "artifact_json": artifact_json,
+                        "artifact_path": result["artifact_path"],
+                    }
+                    response_parts.append(f"\nARTIFACT_METADATA:{json.dumps(metadata)}")
+                except Exception:
+                    pass
 
     else:
         # Failure case - provide detailed context for agent to reason about

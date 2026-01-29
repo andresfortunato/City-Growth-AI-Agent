@@ -34,7 +34,10 @@ TASK: Generate Python code to create a Plotly visualization.
 CRITICAL RULES:
 1. ALWAYS start with: df = pd.read_csv('{data_path}')
 2. NEVER hardcode data values - always read from the CSV
-3. ALWAYS save the figure: fig.write_html('{output_path}')
+3. ALWAYS save BOTH formats at the end:
+   - fig.write_html('{output_path}')
+   - with open('{output_path}'.replace('.html', '.json'), 'w') as f:
+       f.write(fig.to_json())
 4. Use plotly.express (px) for simple charts, plotly.graph_objects (go) for complex ones
 5. Add clear titles, axis labels, and legends
 6. ONLY use columns that exist in the data: {columns}

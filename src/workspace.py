@@ -43,6 +43,11 @@ class JobWorkspace:
         return self.path / "output.html"
 
     @property
+    def json_path(self) -> Path:
+        """Path to Plotly JSON spec (for web embedding)."""
+        return self.path / "output.json"
+
+    @property
     def meta_path(self) -> Path:
         return self.path / "meta.json"
 

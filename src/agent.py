@@ -133,28 +133,38 @@ def create_conversational_agent(checkpointer=None):
     )
 
 
-# Singleton agent instance
-_agent = None
-_checkpointer = None
+# Singleton agent instances (one per checkpointer type)
+_memory_agent = None
+_postgres_agent = None
 
 
-def get_agent():
-    """Get or create the singleton agent instance.
+def get_agent(use_postgres: bool = False):
+    """Get or create the agent instance.
 
-    The agent is created once and reused across requests.
+    Args:
+        use_postgres: If True, use PostgresSaver for persistence (API mode).
+                     If False, use InMemorySaver (CLI/testing mode).
+
+    The agent is created once per checkpointer type and reused.
     Thread isolation is achieved through thread_id in config.
     """
-    global _agent, _checkpointer
+    global _memory_agent, _postgres_agent
 
-    if _agent is None:
-        _checkpointer = InMemorySaver()
-        _agent = create_conversational_agent(checkpointer=_checkpointer)
-
-    return _agent
+    if use_postgres:
+        if _postgres_agent is None:
+            from checkpointer import get_postgres_checkpointer
+            checkpointer = get_postgres_checkpointer()
+            _postgres_agent = create_conversational_agent(checkpointer=checkpointer)
+        return _postgres_agent
+    else:
+        if _memory_agent is None:
+            checkpointer = InMemorySaver()
+            _memory_agent = create_conversational_agent(checkpointer=checkpointer)
+        return _memory_agent
 
 
 def reset_agent():
-    """Reset the singleton agent (useful for testing)."""
-    global _agent, _checkpointer
-    _agent = None
-    _checkpointer = None
+    """Reset the singleton agents (useful for testing)."""
+    global _memory_agent, _postgres_agent
+    _memory_agent = None
+    _postgres_agent = None
