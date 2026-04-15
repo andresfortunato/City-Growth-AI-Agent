@@ -12,13 +12,40 @@ import time
 from typing import Optional
 from langchain_core.messages import AIMessage
 
-from models import IntentClassification, PlotlyCodeOutput, AnalysisOutput
+from models import IntentClassification, PlotlyCodeOutput, AnalysisOutput, QueryPlan
 from prompts import (
     INTENT_CLASSIFICATION_PROMPT,
     GENERATE_PLOTLY_PROMPT,
     ANALYZE_WITH_ARTIFACT_PROMPT,
-    SQL_REVIEW_PROMPT
+    SQL_REVIEW_PROMPT,
+    QUERY_PLAN_PROMPT
 )
+
+
+def _extract_text(response) -> str:
+    """Extract plain text from an LLM response, handling all content formats.
+
+    Gemini can return response.content as:
+    - str: "VALID"
+    - list of dicts: [{"type": "text", "text": "VALID"}]
+    - list of objects with .text attribute
+    - list of strings
+    """
+    content = response.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        if not content:
+            return ""
+        first = content[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, dict):
+            return first.get("text", str(first))
+        if hasattr(first, "text"):
+            return first.text
+        return str(first)
+    return str(content)
 
 
 def classify_intent(state: dict, model) -> dict:
@@ -58,6 +85,48 @@ def classify_intent(state: dict, model) -> dict:
             "suggested_chart_types": [],
             "num_charts": 0,
             "intent_reasoning": f"Classification failed, defaulting to answer: {e}",
+            "warnings": [warning]
+        }
+
+
+def plan_queries(state: dict, model) -> dict:
+    """
+    Decompose the user's request into a structured query plan.
+
+    This node runs BEFORE SQL generation and produces a detailed plan
+    that guides the SQL generator. It prevents the LLM from writing
+    incomplete queries (e.g., SELECT MAX(year) when user wants time series).
+    """
+    user_query = state["messages"][0].content if hasattr(state["messages"][0], 'content') else state["messages"][0]["content"]
+
+    prompt = QUERY_PLAN_PROMPT.format(user_request=user_query)
+
+    structured_model = model.with_structured_output(QueryPlan)
+
+    try:
+        response = structured_model.invoke([
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": f"Plan the query strategy for: {user_query}"}
+        ])
+
+        # Format the plan as guidance text for the SQL generator
+        plan_text = (
+            f"DATA REQUIREMENTS: {response.data_requirements}\n"
+            f"SQL STRATEGY: {response.sql_strategy}\n"
+            f"EXPECTED COLUMNS: {', '.join(response.expected_columns)}\n"
+            f"EXPECTED ROWS: {response.expected_row_estimate}"
+        )
+
+        return {
+            "query_plan": plan_text,
+            "query_plan_reasoning": response.sql_strategy
+        }
+    except Exception as e:
+        from logger import log_warning
+        warning = log_warning(f"Query planning failed: {e}")
+        return {
+            "query_plan": None,
+            "query_plan_reasoning": None,
             "warnings": [warning]
         }
 
@@ -127,14 +196,7 @@ Examples:
 
     try:
         response = model.invoke([{"role": "user", "content": validation_prompt}])
-
-        # Extract text from response (handle both string and list formats)
-        if isinstance(response.content, list):
-            result = response.content[0].get('text', '') if response.content else ''
-        else:
-            result = str(response.content)
-
-        result = result.strip()
+        result = _extract_text(response).strip()
 
         # Check if response indicates the request is valid
         # Only "VALID" (exact match or starting with VALID) means proceed
@@ -210,14 +272,7 @@ def review_sql(state: dict, model) -> dict:
 
     try:
         response = model.invoke([{"role": "user", "content": prompt}])
-
-        # Extract text from response
-        if isinstance(response.content, list):
-            result = response.content[0].get('text', '') if response.content else ''
-        else:
-            result = str(response.content)
-
-        result = result.strip()
+        result = _extract_text(response).strip()
 
         if result.upper().startswith("PASS"):
             log_warning(f"SQL review PASSED (attempt {current_attempts})")

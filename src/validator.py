@@ -43,4 +43,7 @@ def validate_code(code: str) -> Tuple[bool, str]:
     if "write_html" not in code:
         return False, "Code must use fig.write_html() to save output"
 
+    if "to_json" not in code:
+        return False, "Code must use fig.to_json() to save JSON output for web embedding"
+
     return True, ""

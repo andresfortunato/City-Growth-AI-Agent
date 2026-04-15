@@ -53,6 +53,10 @@ class VisualizationState(TypedDict, total=False):
     request_valid: Optional[bool]
     clarification_needed: Optional[str]
 
+    # Query planning
+    query_plan: Optional[str]
+    query_plan_reasoning: Optional[str]
+
     # SQL review loop tracking
     sql_review_passed: Optional[bool]
     sql_review_feedback: Optional[str]

@@ -33,6 +33,24 @@ class PlotlyCodeOutput(BaseModel):
     columns_used: List[str] = Field(description="Columns from the CSV used in the chart")
 
 
+class QueryPlan(BaseModel):
+    """Structured output for SQL query planning."""
+    data_requirements: str = Field(
+        description="Plain-English description of exactly what data the SQL query must return. "
+        "Include: metrics needed, filtering criteria, time range, grouping, sorting, and any calculations."
+    )
+    sql_strategy: str = Field(
+        description="Specific SQL approach: e.g., 'Use CTE to first identify top 10 MSAs by X, "
+        "then join back to get time series for those MSAs' or 'Simple GROUP BY with HAVING'"
+    )
+    expected_columns: List[str] = Field(
+        description="Column names the result set should contain (e.g., ['area_title', 'year', 'annual_avg_emplvl'])"
+    )
+    expected_row_estimate: str = Field(
+        description="Rough estimate of expected rows, e.g., '~50 rows (5 cities x 10 years)' or '10 rows (top 10)'"
+    )
+
+
 class AnalysisOutput(BaseModel):
     """Structured output for chart analysis."""
     summary: str = Field(description="Brief description of what the chart shows")

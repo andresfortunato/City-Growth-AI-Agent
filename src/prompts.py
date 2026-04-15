@@ -34,7 +34,10 @@ TASK: Generate Python code to create a Plotly visualization.
 CRITICAL RULES:
 1. ALWAYS start with: df = pd.read_csv('{data_path}')
 2. NEVER hardcode data values - always read from the CSV
-3. ALWAYS save the figure: fig.write_html('{output_path}')
+3. ALWAYS save BOTH formats at the end:
+   - fig.write_html('{output_path}')
+   - with open('{output_path}'.replace('.html', '.json'), 'w') as f:
+       f.write(fig.to_json())
 4. Use plotly.express (px) for simple charts, plotly.graph_objects (go) for complex ones
 5. Add clear titles, axis labels, and legends
 6. ONLY use columns that exist in the data: {columns}
@@ -48,21 +51,25 @@ USER REQUEST: {user_request}
 
 CHART TYPE GUIDELINES:
 - Time series (year on x-axis): Use px.line()
-- Comparisons (categories): Use px.bar() with orientation='h' for horizontal bars (PREFERRED for readability)
+- Comparisons using only one variable: Use px.bar() with orientation='h' for horizontal bars (PREFERRED for readability)
+- Comparisons using only two variables: Use px.scatter()
 - Distributions: Use px.histogram() or px.box()
 - Correlations: Use px.scatter()
 - Rankings: Use px.bar() with horizontal orientation
 - Multi-city comparison over time: Use px.line() with color= parameter
+- When user asks for a specific type of chart, plot that chart type (do not make up a chart type that is not requested)
+
 
 VISUALIZATION RULES:
 - Bar charts should always be horizontal for readability  
 - For rankings: Sort data appropriately before plotting
-- Use clear, descriptive titles
-- Always add the name of the city or area to the title of the chart (unless the label or legend already shows city or area names)
+- Use clear, descriptive titles and ALWAYS add the name of the city or area plotted to the title of the chart (unless the label or legend already shows city or area names)
 - Format axis labels (e.g., "${{:,.0f}}" for currency)
 - Add hover data for interactivity
 - When doing a multi-chart, always display them in the same output as subplots, unless they are line charts, in which case plot both lines in the same chart with secondary y-axis. 
-Generate complete, runnable Python code."""
+
+SPECIAL CASE: If user asks for wage growth vs employment growth scatter
+- Add mean lines with add_vline(x_mean)/add_hline(y_mean); add diagonals via add_shape using x_min/x_max and y=x+(y_mean-x_mean), y=-x+(y_mean+x_mean). Add annotations for all lines and make them longdash."""
 
 
 ANALYZE_WITH_ARTIFACT_PROMPT = """You are a data analyst providing insights about a visualization.
@@ -128,6 +135,58 @@ Examples of failures:
 - User asks for CAGR, query returns raw values without calculation -> FAIL
 - User asks for 7 cities, query returns 1 row -> FAIL
 - User asks for wages, query only returns year -> FAIL
+"""
+
+
+QUERY_PLAN_PROMPT = """You are an expert data analyst planning the SQL query strategy for a user's request.
+
+DATABASE SCHEMA:
+Table: msa_wages_employment_data
+- area_fips (text): FIPS code for the area
+- year (integer): 2000-2024
+- qtr (text): 'A' for annual, '1'-'4' for quarterly
+- annual_avg_estabs_count (integer): number of establishments
+- annual_avg_emplvl (integer): employment level
+- total_annual_wages (bigint): total wages
+- avg_annual_pay (integer): average annual pay per worker
+- annual_avg_wkly_wage (integer): average weekly wage
+- area_title (text): full MSA name (e.g., "Boston-Cambridge-Newton, MA-NH")
+- state (text): 2-letter state code (e.g., 'CA', 'TX')
+
+RULES:
+- ALWAYS use qtr = 'A' for annual data
+- area_title uses ILIKE with wildcards for matching
+- state uses exact 2-letter codes
+
+YOUR TASK: Given the user's request, produce a detailed query plan that specifies:
+
+1. DATA REQUIREMENTS: What exact data must the query return? Be specific about metrics, filters, time ranges.
+
+2. SQL STRATEGY: What SQL pattern is needed?
+   - Simple query? CTE? Subquery? Window function?
+   - For "top N" + time series: Use a CTE to identify top N entities first, then join back for full time series
+   - For "growth" or "recovery": Must include multiple years to show change over time
+   - For "comparison": Must include all entities being compared
+   - For "CAGR": Must calculate using the formula, not just return raw values
+
+3. EXPECTED COLUMNS: What columns should appear in the result set?
+
+4. EXPECTED ROW COUNT: Approximately how many rows should the result have?
+
+EXAMPLES:
+- "Top 10 MSAs by employment recovery post-2020":
+  - Data: Employment levels for years 2020-2024, for the 10 MSAs with highest employment
+  - Strategy: CTE to find top 10 MSAs by latest employment, then get yearly data for those MSAs
+  - Expected columns: area_title, year, annual_avg_emplvl
+  - Expected rows: ~50 (10 cities x 5 years)
+
+- "CAGR of wages for Austin 2014-2024":
+  - Data: avg_annual_pay for Austin in 2014 and 2024
+  - Strategy: Simple query with CASE WHEN for start/end years, then POWER calculation
+  - Expected columns: area_title, wage_cagr_pct
+  - Expected rows: 1
+
+USER REQUEST: {user_request}
 """
 
 

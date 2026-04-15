@@ -3,13 +3,13 @@ import os
 import sys
 from pathlib import Path
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src/ to path for module imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from langchain_community.utilities import SQLDatabase
-from tools import execute_query_with_handoff
+from sql_tools import execute_query_with_handoff
 from workspace import create_workspace, cleanup_workspace
 
 load_dotenv()
