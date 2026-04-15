@@ -22,6 +22,32 @@ from prompts import (
 )
 
 
+def _extract_text(response) -> str:
+    """Extract plain text from an LLM response, handling all content formats.
+
+    Gemini can return response.content as:
+    - str: "VALID"
+    - list of dicts: [{"type": "text", "text": "VALID"}]
+    - list of objects with .text attribute
+    - list of strings
+    """
+    content = response.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        if not content:
+            return ""
+        first = content[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, dict):
+            return first.get("text", str(first))
+        if hasattr(first, "text"):
+            return first.text
+        return str(first)
+    return str(content)
+
+
 def classify_intent(state: dict, model) -> dict:
     """
     Determine if user wants a text answer, single chart, or multiple charts.
@@ -170,14 +196,7 @@ Examples:
 
     try:
         response = model.invoke([{"role": "user", "content": validation_prompt}])
-
-        # Extract text from response (handle both string and list formats)
-        if isinstance(response.content, list):
-            result = response.content[0].get('text', '') if response.content else ''
-        else:
-            result = str(response.content)
-
-        result = result.strip()
+        result = _extract_text(response).strip()
 
         # Check if response indicates the request is valid
         # Only "VALID" (exact match or starting with VALID) means proceed
@@ -253,14 +272,7 @@ def review_sql(state: dict, model) -> dict:
 
     try:
         response = model.invoke([{"role": "user", "content": prompt}])
-
-        # Extract text from response
-        if isinstance(response.content, list):
-            result = response.content[0].get('text', '') if response.content else ''
-        else:
-            result = str(response.content)
-
-        result = result.strip()
+        result = _extract_text(response).strip()
 
         if result.upper().startswith("PASS"):
             log_warning(f"SQL review PASSED (attempt {current_attempts})")

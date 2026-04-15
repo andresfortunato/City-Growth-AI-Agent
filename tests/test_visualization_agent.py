@@ -2,8 +2,8 @@
 import sys
 from pathlib import Path
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src/ to path for module imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from visualization_agent import classify_single
 from workspace import cleanup_old_workspaces

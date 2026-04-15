@@ -21,12 +21,13 @@ import shutil
 from pathlib import Path
 from typing import Literal
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, pool
 from langchain.chat_models import init_chat_model
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
+
+from db import get_engine
 
 from state import VisualizationState
 from sql_tools import execute_query_with_handoff
@@ -57,25 +58,8 @@ def setup_model():
 
 
 def setup_database():
-    """Create database connection with connection pooling."""
-    DB_USER = os.getenv("DB_USER", "city_growth_postgres")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "CityGrowthDiagnostics2026")
-    DB_HOST = os.getenv("DB_HOST", "localhost")
-    DB_PORT = os.getenv("DB_PORT", "5432")
-    DB_NAME = os.getenv("DB_NAME", "postgres")
-
-    db_uri = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-    engine = create_engine(
-        db_uri,
-        poolclass=pool.QueuePool,
-        pool_size=5,
-        max_overflow=10,
-        pool_timeout=30,
-        pool_recycle=3600,
-        pool_pre_ping=True,
-    )
-    return SQLDatabase(engine)
+    """Create database connection using the shared connection pool."""
+    return SQLDatabase(get_engine())
 
 
 def build_visualization_agent(db, model):
@@ -194,15 +178,11 @@ For BOTH employment AND wage CAGR, add both calculations to the SELECT clause.
         return validate_columns(state)
 
     def analyze_results_node(state):
+        from visualization_nodes import _extract_text
         user_q = state["messages"][0].content if len(state["messages"]) > 0 else "Unknown"
         prompt = f"Analyze this data for: {user_q}\n\nData:\n{state.get('data_preview', 'No data')}"
         response = model.invoke([{"role": "user", "content": prompt}])
-
-        # Extract text from response (handle both string and list formats)
-        if isinstance(response.content, list):
-            analysis_text = response.content[0].get('text', '') if response.content else ''
-        else:
-            analysis_text = str(response.content)
+        analysis_text = _extract_text(response)
 
         return {
             "analysis": analysis_text,

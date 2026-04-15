@@ -6,29 +6,17 @@ For user-facing analysis and visualizations, use data_analysis_workflow instead.
 """
 
 import asyncio
-import os
 import re
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from sqlalchemy import text
 
-load_dotenv()
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from db import get_engine
 
 # Maximum rows to return
 MAX_ROWS = 100
-
-
-def _get_db_engine():
-    """Get database engine using environment variables."""
-    DB_USER = os.getenv("DB_USER", "city_growth_postgres")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "CityGrowthDiagnostics2026")
-    DB_HOST = os.getenv("DB_HOST", "localhost")
-    DB_PORT = os.getenv("DB_PORT", "5432")
-    DB_NAME = os.getenv("DB_NAME", "postgres")
-
-    db_uri = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    return create_engine(db_uri)
 
 
 def _validate_sql(sql: str) -> tuple[bool, str]:
@@ -76,7 +64,7 @@ async def query_database(sql: str, config: RunnableConfig = None) -> str:
         return f"SQL Validation Error: {error}"
 
     def _execute():
-        engine = _get_db_engine()
+        engine = get_engine()
 
         # Add LIMIT if not present
         sql_modified = sql.strip().rstrip(";")

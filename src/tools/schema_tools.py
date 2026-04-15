@@ -7,12 +7,13 @@ running analysis or generating visualizations.
 
 import asyncio
 import os
+import sys
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from sqlalchemy import text
 
-load_dotenv()
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from db import get_engine
 
 # Database schema documentation (hardcoded for performance)
 SCHEMA_DOC = """
@@ -39,16 +40,6 @@ Important Notes:
 """
 
 
-def _get_db_engine():
-    """Get database engine using environment variables."""
-    DB_USER = os.getenv("DB_USER", "city_growth_postgres")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "CityGrowthDiagnostics2026")
-    DB_HOST = os.getenv("DB_HOST", "localhost")
-    DB_PORT = os.getenv("DB_PORT", "5432")
-    DB_NAME = os.getenv("DB_NAME", "postgres")
-
-    db_uri = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    return create_engine(db_uri)
 
 
 @tool
@@ -68,7 +59,7 @@ async def get_schema(table_name: str = "msa_wages_employment_data", config: Runn
 
     # For other tables, query the information schema
     def _query_schema():
-        engine = _get_db_engine()
+        engine = get_engine()
         with engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT column_name, data_type, is_nullable
@@ -105,7 +96,7 @@ async def sample_data(table_name: str = "msa_wages_employment_data", n_rows: int
     n_rows = min(max(n_rows, 1), 10)
 
     def _sample():
-        engine = _get_db_engine()
+        engine = get_engine()
         with engine.connect() as conn:
             # For the main table, get a diverse sample (different cities, recent years)
             if table_name == "msa_wages_employment_data":
@@ -148,7 +139,7 @@ async def list_cities(state_filter: str = None, config: RunnableConfig = None) -
         state_filter: Optional 2-letter state code to filter results (e.g., 'TX', 'CA')
     """
     def _list():
-        engine = _get_db_engine()
+        engine = get_engine()
         with engine.connect() as conn:
             if state_filter:
                 result = conn.execute(text("""

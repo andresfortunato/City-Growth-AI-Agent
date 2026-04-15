@@ -1,0 +1,42 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [main, conversation-agent]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run unit tests (no external services)
+        run: >
+          uv run pytest tests/ -m "not integration and not slow"
+          -k "TestToolImports or TestAgentImports or test_validation or test_rejects"
+          -v --tb=short
+        env:
+          LANGSMITH_TRACING: "false"
+
+      # Full test suite (requires DB_PASSWORD, GEMINI_API_KEY as repo secrets)
+      # Uncomment when secrets are configured:
+      # - name: Run full test suite
+      #   run: uv run pytest tests/ -m "not integration and not slow" -v --tb=short
+      #   env:
+      #     LANGSMITH_TRACING: "false"
+      #     DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      #     GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

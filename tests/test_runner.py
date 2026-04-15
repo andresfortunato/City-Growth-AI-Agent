@@ -3,8 +3,8 @@ import os
 import sys
 from pathlib import Path
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src/ to path for module imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
@@ -21,9 +21,12 @@ def test_validation():
     valid_code = """
 import pandas as pd
 import plotly.express as px
+import json
 df = pd.read_csv('/tmp/data.csv')
 fig = px.line(df, x='year', y='value')
 fig.write_html('/tmp/output.html')
+with open('/tmp/output.json', 'w') as f:
+    f.write(fig.to_json())
 """
     is_valid, error = validate_code(valid_code)
     assert is_valid, f"Valid code rejected: {error}"
@@ -50,6 +53,8 @@ import plotly.express as px
 df = pd.read_csv('{workspace.data_path}')
 fig = px.line(df, x='year', y='value', title='Test Chart')
 fig.write_html('{workspace.output_path}')
+with open('{workspace.json_path}', 'w') as f:
+    f.write(fig.to_json())
 """
 
     result = execute_plotly_code(workspace, code)

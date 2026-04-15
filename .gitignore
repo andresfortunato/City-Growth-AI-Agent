@@ -25,4 +25,5 @@ frontend/dist/
 frontend/.vite/
 
 # Environment
+.env
 .env.local
