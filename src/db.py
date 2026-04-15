@@ -18,7 +18,7 @@ def get_engine():
     """Get or create the shared SQLAlchemy engine with connection pooling."""
     global _engine
     if _engine is None:
-        DB_USER = os.getenv("DB_USER", "city_growth_postgres")
+        DB_USER = os.getenv("DB_USER")
         DB_PASSWORD = os.getenv("DB_PASSWORD")
         DB_HOST = os.getenv("DB_HOST", "localhost")
         DB_PORT = os.getenv("DB_PORT", "5432")
