@@ -4,6 +4,33 @@ An AI-powered conversational agent for urban economics analysis. Ask natural-lan
 
 Built with LangGraph, FastAPI, React, and PostgreSQL.
 
+## Try the UI (Local Testing)
+
+Spin up the full stack in two terminals:
+
+```bash
+# Terminal 1 — Backend API (port 8001)
+bash scripts/start_server.sh
+
+# Terminal 2 — React frontend (port 5173)
+cd frontend && npm install && npm run dev
+```
+
+Then open **http://localhost:5173** in your browser and start chatting.
+
+**First-time checklist:**
+1. PostgreSQL is running locally with the `msa_wages_employment_data` table populated
+2. `.env` is configured (copy from `.env.example` and fill in `GEMINI_API_KEY` + DB credentials)
+3. `uv sync` has been run to install Python dependencies
+4. Node.js 18+ is installed for the frontend
+
+**Try these queries to verify everything works:**
+- `"How many MSAs are in Texas?"` — tests schema tools
+- `"What is the average wage in Austin in 2023?"` — tests SQL + text answer
+- `"Show wage trends for Austin from 2010 to 2024"` — tests full viz workflow with inline chart
+
+If you hit a 500 error, the most common cause is missing env vars — restart the backend after fixing `.env` since env vars are loaded at process startup. For CLI-only testing without the browser, see [Quick Start](#quick-start) below.
+
 ## Why This Exists
 
 Urban economists, planners, and economic developers regularly need to explore MSA-level labor market data — wage trends, employment shifts, city comparisons, growth rates. The typical workflow involves writing SQL, exporting to Excel, and manually building charts. This agent replaces that with a conversational interface:

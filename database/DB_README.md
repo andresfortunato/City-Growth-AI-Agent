@@ -142,14 +142,15 @@ Scripts use these connection parameters (from `.env`):
 Host:     localhost
 Port:     5432
 User:     city_growth_postgres
-Password: CityGrowthDiagnostics2026
+Password: (see .env)
 Database: postgres
 ```
 
 To run with explicit credentials:
 
 ```bash
-PGPASSWORD=CityGrowthDiagnostics2026 \
+source .env
+PGPASSWORD=$DB_PASSWORD \
 psql -h localhost -U city_growth_postgres -d postgres \
   -f database/01_analyze_duplicates.sql
 ```

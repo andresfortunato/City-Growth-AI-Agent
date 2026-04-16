@@ -46,7 +46,7 @@ def setup_model():
 def setup_database():
     """Create database connection"""
     DB_USER = os.getenv("DB_USER", "city_growth_postgres")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "CityGrowthDiagnostics2026")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
     DB_HOST = os.getenv("DB_HOST", "localhost")
     DB_PORT = os.getenv("DB_PORT", "5432")
     DB_NAME = os.getenv("DB_NAME", "postgres")
